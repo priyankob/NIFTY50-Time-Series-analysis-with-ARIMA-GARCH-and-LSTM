@@ -1,4 +1,4 @@
-# MSBD5006---NIFTY50-Time-Series-analysis-with-ARIMA-GARCH-and-LSTM
+# NIFTY50 Time Series analysis with ARIMA,GARCH and LSTM
 
 All the codes either on Python or R , following are the descriptions  
 **nifty-dwm.ipynb** - Python Notebook for initial analysis , visualization on the dataset  
