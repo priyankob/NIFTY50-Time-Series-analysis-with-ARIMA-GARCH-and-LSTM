@@ -1,0 +1,175 @@
+---
+title: "project"
+output: html_document
+---
+
+```{r}
+getwd()
+library(fUnitRoots)
+library(fGarch)
+library(rugarch)
+```
+
+```{r}
+# 2014/01-2019/12
+nif=read.csv("daily_2014_2021.csv",header=T)[,5]
+#nif=read.csv("early.csv",header=T)[,5]
+#nif=rev(nif)  # price
+length(nif)
+```
+
+```{r}
+plot(nif,xlab=" ",ylab=" ",main="",type="l",col="red")
+```
+
+```{r}
+lnnif=diff(log(nif))*100 #log return
+plot(lnnif,xlab=" ",ylab=" ",main="",type="l",col="red")
+```
+
+```{r}
+summary(lnnif)
+```
+
+```{r}
+#unitroots test
+adfTest(log(nif),lags=10,type="c")
+```
+
+```{r}
+acf(lnnif,10,main="",col="red",ylim=c(-0.2,0.4))
+pacf(lnnif,10,main="",col="red",ylim=c(-0.2,0.4))
+Box.test(lnnif,lag=10,type="Ljung")
+```
+
+```{r}
+at=lnnif-mean(lnnif)
+acf(at^2,10,main="",col="red",ylim=c(-0.2,0.4))
+pacf(at^2,10,main="",col="red",ylim=c(-0.2,0.4))
+Box.test(at^2,lag=10,type="Ljung")
+```
+
+```{r}
+m1=garchFit(lnnif~garch(1,1),data=lnnif,trace=F)
+summary(m1)
+```
+
+```{r}
+stresi=residuals(m1,standardize=T)
+plot(stresi,xlab="",ylab="",main="",type="l",col="red",ylim=c(-8,6))
+```
+
+```{r}
+Box.test(stresi,10,type="Ljung")
+
+Box.test(stresi,20,type="Ljung")
+
+Box.test(stresi^2,10,type="Ljung")
+
+Box.test(stresi^2,20,type="Ljung")
+```
+
+```{r}
+predict(m1, n.ahead = 100, trace = FALSE, mse = c("cond","uncond"),
+        plot=TRUE, nx=NULL, crit_val=NULL, conf=NULL)
+```
+
+```{r}
+garchm=ugarchspec(
+  mean.model = list(
+    armaOrder=c(0,0),
+    include.mean=TRUE,
+    archm=TRUE,arcpow=2,
+    distributation.model="norm"),
+  variance.model = list(
+    model="sGARCH",garchOrder=c(1,1))
+)
+m2 = ugarchfit(spec=garchm,data=lnnif)
+m2
+```
+
+```{r}
+source('garchM.R')
+garchM(lnnif)
+```
+
+```{r}
+igarch=ugarchspec(
+  variance.model=list(model="iGARCH",
+                      garchOrder=c(1,1)),
+  mean.model=list(armaOrder=c(0,0)))
+m3=ugarchfit(spec=igarch,data=lnnif)
+m3
+```
+
+```{r}
+res=residuals(m3,standardize=T)
+
+
+Box.test(res,10,type="Ljung")
+Box.test(res,20,type="Ljung")
+
+Box.test(res^2,10,type="Ljung")
+```
+
+
+
+```{r}
+egarch=ugarchspec(variance.model=list(model="eGARCH"),
+                 mean.model=list(armaOrder=c(0,0),include.mean=TRUE) )
+m4=ugarchfit(spec=egarch,data=lnnif)
+m4
+```
+
+```{r}
+leverage=-0.134015/0.120114
+leverage
+```
+
+
+```{r}
+res=residuals(m4,standardize=T)
+
+
+Box.test(res,10,type="Ljung")
+Box.test(res,20,type="Ljung")
+
+Box.test(res^2,10,type="Ljung")
+```
+
+```{r}
+#TGARCH
+m5=garchFit(~aparch(1,1),data=lnnif,trace=F,delta=2,include.delta=F)
+m5
+```
+
+```{r}
+res=residuals(m5,standardize=T)
+
+
+Box.test(res,10,type="Ljung")
+Box.test(res,20,type="Ljung")
+
+Box.test(res^2,10,type="Ljung")
+```
+
+```{r}
+predict(m5, n.ahead = 100, trace = FALSE, mse = c("cond","uncond"),
+        plot=TRUE, nx=NULL, crit_val=NULL, conf=NULL)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

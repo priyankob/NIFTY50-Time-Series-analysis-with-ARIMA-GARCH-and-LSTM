@@ -1,0 +1,708 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+getwd()
+library(fUnitRoots)
+library(fGarch)
+library(rugarch)
+```
+
+```{r}
+daily <- as.numeric(read.csv("daily_2009_to_2021.csv",header=T, stringsAsFactors=F)$Close)
+plot(daily,type="l")
+daily_return= diff(log(daily))*100
+plot(daily,type="l")
+train0918 = daily_return[1:2439]
+valid19 = daily_return[2440:2680]
+train0920 = daily_return[1:2930]
+valid21 = daily_return[2931:3149]
+```
+
+```{r}
+acf(train0918,20,main="",col="red",ylim=c(-0.2,1))
+pacf(train0918,20,main="",col="red",ylim=c(-0.2,1))
+print("if p.value < 0.05 not white noise else white noise")
+Box.test(train0918,lag=10,type="Ljung")
+print("if p.value < 0.05 stationary else not stationary")
+tseries::adf.test(train0918) #p-value = 0.01
+```
+
+```{r}
+ar=arima(train0918,order=c(9,0,0),  fixed=c(NA,0, 0, 0, 0, 0, 0, 0,NA, NA))
+ar
+
+Box.test(ar$residuals,lag=10,type="Ljung")
+pv=1-pchisq(11.594,8)
+pv#0.1702585
+
+forecast=predict(ar,241)
+U1=forecast$pred +1.96 * forecast$se
+L1=forecast$pred - 1.96 * forecast$se
+E1=forecast$pred+forecast$se*forecast$se
+print(sum((valid19-E1)^2)/241)
+
+
+#plot(2000:2680,train0918[2000:2680],type="o",main="Forecasting")
+#lines(2439:2680, append(train0918[2439],E1),type="o",col="red")
+#lines(2439:2680, U2,type="l",col="blue")
+#lines(2439:2680, L2,type="l",col="blue")
+#legend(x="topleft",c("True returns","prediction"),col=c("black","red"))
+```
+
+```{r}
+ar_res = (ar$residuals)^2
+acf(ar_res,20,main="",col="red",ylim=c(-0.2,1))
+pacf(ar_res,20,main="",col="red",ylim=c(-0.2,1))
+print("if p.value < 0.05 not white noise else white noise")
+Box.test(ar_res,lag=10,type="Ljung")
+print("if p.value < 0.05 stationary else not stationary")
+tseries::adf.test(ar_res) #p-value = 0.01
+```
+```{r}
+garch_ar=garchFit(train0918~arma(1, 0)+garch(1,1),data=train0918,trace=F)
+summary(garch_ar)
+garch_ar_resi=residuals(garch_ar,standardize=T)
+plot(garch_ar_resi,xlab=" ",ylab=" ",main="",type="l",col="red",ylim=c(-15,15))
+
+#model checking
+Box.test(garch_ar_resi,10,type="Ljung")
+1-pchisq(8.3949,9)
+Box.test(garch_ar_resi^2,10,type="Ljung")
+1-pchisq(4.0023,9)
+
+predict(garch_ar, n.ahead = 241, trace = FALSE, mse = c("cond","uncond"),
+        plot=TRUE, nx=NULL, crit_val=NULL, conf=NULL)
+```
+
+
+```{r}
+garchm = ugarchspec(variance.model=list(model="sGARCH", garchOrder=c(1,1)), 
+                    mean.model=list(armaOrder=c(0,0), archm=T, archpow=2, 
+                                    include.mean=TRUE))
+m_garchm = ugarchfit(spec=garchm,data=train0918)
+m_garchm
+
+garchm_res=residuals(m_garchm,standardize=T)
+
+Box.test(garchm_res,10,type="Ljung")
+Box.test(garchm_res^2,10,type="Ljung")
+```
+
+```{r}
+ar_igarch=ugarchspec(
+  variance.model=list(model="iGARCH",
+                      garchOrder=c(1,1)),
+  mean.model=list(armaOrder=c(1,0)))
+m_igarch=ugarchfit(spec=ar_igarch,data=train0918)
+m_igarch
+
+igarch_res=residuals(m_igarch,standardize=T)
+
+Box.test(igarch_res,10,type="Ljung")
+Box.test(igarch_res^2,10,type="Ljung")
+```
+
+```{r}
+egarch=ugarchspec(variance.model=list(model="eGARCH"),
+                 mean.model=list(armaOrder=c(1,0),include.mean=TRUE),
+                 fixed.pars = list(omega = 0))
+m_egarch=ugarchfit(spec=egarch,data=train0918)
+m_egarch
+
+egarch_res=residuals(m_egarch,standardize=T)
+
+Box.test(egarch_res,10,type="Ljung")
+Box.test(egarch_res^2,10,type="Ljung")
+```
+
+```{r}
+tgarch=garchFit(train0918~arma(1,0)+aparch(1,1),data=train0918,trace=F,delta=2,include.delta=F, include.mean = FALSE)
+tgarch
+tgarch_res=residuals(tgarch,standardize=T)
+
+Box.test(tgarch_res,10,type="Ljung")
+Box.test(tgarch_res^2,10,type="Ljung")
+```
+
+```{r}
+ma=arima(train0918,order=c(0,0,9), fixed = c(NA, 0, 0, 0, 0, 0, 0, 0, NA, NA))
+ma
+
+Box.test(ma$residuals,lag=10,type="Ljung")
+pv=1-pchisq(12.172,8)
+pv#0.1436931
+
+fore=predict(ma,241)
+#fore
+
+```
+
+```{r}
+ar_res = (ma$residuals)^2
+acf(ar_res,20,main="",col="red",ylim=c(-0.2,1))
+pacf(ar_res,20,main="",col="red",ylim=c(-0.2,1))
+print("if p.value < 0.05 not white noise else white noise")
+Box.test(ar_res,lag=10,type="Ljung")
+print("if p.value < 0.05 stationary else not stationary")
+tseries::adf.test(ar_res) #p-value = 0.01
+```
+
+```{r}
+garch_ma=garchFit(train0918~arma(0, 1)+garch(1,1),data=train0918,trace=F)
+summary(garch_ma)
+garch_ma_resi=residuals(garch_ma,standardize=T)
+plot(garch_ma_resi,xlab=" ",ylab=" ",main="",type="l",col="red",ylim=c(-15,15))
+
+#model checking
+Box.test(garch_ma_resi,10,type="Ljung")
+Box.test(garch_ma_resi^2,10,type="Ljung")
+predict(garch_ma, n.ahead = 241, trace = FALSE, mse = c("cond","uncond"),
+        plot=TRUE, nx=NULL, crit_val=NULL, conf=NULL)
+```
+
+```{r}
+ma_igarch=ugarchspec(
+  variance.model=list(model="iGARCH",
+                      garchOrder=c(1,1)),
+  mean.model=list(armaOrder=c(0,1)))
+m_igarch=ugarchfit(spec=ma_igarch,data=train0918)
+m_igarch
+
+igarch_res=residuals(m_igarch,standardize=T)
+
+Box.test(igarch_res,10,type="Ljung")
+Box.test(igarch_res^2,10,type="Ljung")
+```
+
+```{r}
+egarch=ugarchspec(variance.model=list(model="eGARCH"),
+                 mean.model=list(armaOrder=c(0,1),include.mean=FALSE) )
+m_egarch=ugarchfit(spec=egarch,data=train0918)
+m_egarch
+
+egarch_res=residuals(m_egarch,standardize=T)
+
+Box.test(egarch_res,10,type="Ljung")
+Box.test(egarch_res^2,10,type="Ljung")
+```
+
+```{r}
+tgarch=garchFit(train0918~arma(0,1)+aparch(1,1),data=train0918,trace=F,delta=2,include.delta=F, include.mean = FALSE)
+tgarch
+tgarch_res=residuals(tgarch,standardize=T)
+
+Box.test(tgarch_res,10,type="Ljung")
+Box.test(tgarch_res^2,10,type="Ljung")
+```
+
+```{r}
+acf(train0920,20,main="",col="red",ylim=c(-0.2,1))
+pacf(train0920,20,main="",col="red",ylim=c(-0.2,1))
+print("if p.value < 0.05 not white noise else white noise")
+Box.test(train0920,lag=10,type="Ljung")
+print("if p.value < 0.05 stationary else not stationary")
+tseries::adf.test(train0920) #p-value = 0.01
+```
+
+```{r}
+ar=arima(train0920,order=c(11,0,0), fixed = c(0, 0, 0, 0, 0, NA, NA, 0, 0, NA, NA, NA))
+ar
+
+Box.test(ar$residuals,lag=10,type="Ljung")
+pv=1-pchisq(7.8601,6)
+pv#0.248533
+```
+
+```{r}
+ar_res = (ar$residuals)^2
+acf(ar_res,20,main="",col="red",ylim=c(-0.2,1))
+pacf(ar_res,20,main="",col="red",ylim=c(-0.2,1))
+print("if p.value < 0.05 not white noise else white noise")
+Box.test(ar_res,lag=10,type="Ljung")
+print("if p.value < 0.05 stationary else not stationary")
+tseries::adf.test(ar_res) #p-value = 0.01
+```
+
+```{r}
+garch_ar=garchFit(train0920~arma(1, 0)+garch(1,1),data=train0920,trace=F)
+summary(garch_ar)
+garch_ar_resi=residuals(garch_ar,standardize=T)
+plot(garch_ar_resi,xlab=" ",ylab=" ",main="",type="l",col="red",ylim=c(-15,15))
+
+#model checking
+Box.test(garch_ar_resi,10,type="Ljung")
+1-pchisq(11.639,9)
+Box.test(garch_ar_resi^2,10,type="Ljung")
+1-pchisq(4.3935,9)
+
+predict(garch_ar, n.ahead = 241, trace = FALSE, mse = c("cond","uncond"),
+        plot=TRUE, nx=NULL, crit_val=NULL, conf=NULL)
+```
+
+```{r}
+garchm = ugarchspec(variance.model=list(model="sGARCH", garchOrder=c(1,1)), 
+                    mean.model=list(armaOrder=c(0,0), archm=T, archpow=2, 
+                                    include.mean=TRUE))
+m_garchm = ugarchfit(spec=garchm,data=train0920)
+m_garchm
+
+garchm_res=residuals(m_garchm,standardize=T)
+
+Box.test(garchm_res,10,type="Ljung")
+Box.test(garchm_res^2,10,type="Ljung")
+```
+
+```{r}
+ar_igarch=ugarchspec(
+  variance.model=list(model="iGARCH",
+                      garchOrder=c(1,1)),
+  mean.model=list(armaOrder=c(1,0)))
+m_igarch=ugarchfit(spec=ar_igarch,data=train0920)
+m_igarch
+
+igarch_res=residuals(m_igarch,standardize=T)
+
+Box.test(igarch_res,10,type="Ljung")
+Box.test(igarch_res^2,10,type="Ljung")
+```
+
+```{r}
+egarch=ugarchspec(variance.model=list(model="eGARCH"),
+                 mean.model=list(armaOrder=c(1,0),include.mean=TRUE),
+                 fixed.pars = list(omega = 0))
+m_egarch=ugarchfit(spec=egarch,data=train0920)
+m_egarch
+
+egarch_res=residuals(m_egarch,standardize=T)
+
+Box.test(egarch_res,10,type="Ljung")
+Box.test(egarch_res^2,10,type="Ljung")
+```
+
+```{r}
+tgarch=garchFit(train0918~arma(0,1)+aparch(1,1),data=train0920,trace=F,delta=2,include.delta=F)
+tgarch
+tgarch_res=residuals(tgarch,standardize=T)
+
+Box.test(tgarch_res,10,type="Ljung")
+Box.test(tgarch_res^2,10,type="Ljung")
+```
+
+```{r}
+ma=arima(train0920,order=c(0,0,10), fixed = c(0, 0, 0, 0, 0, NA, NA, 0, NA, NA, NA))
+ma
+
+Box.test(ma$residuals,lag=10,type="Ljung")
+pv=1-pchisq(4.5196,6)
+pv#0.6067261
+```
+
+```{r}
+ar_res = (ma$residuals)^2
+acf(ar_res,20,main="",col="red",ylim=c(-0.2,1))
+pacf(ar_res,20,main="",col="red",ylim=c(-0.2,1))
+print("if p.value < 0.05 not white noise else white noise")
+Box.test(ar_res,lag=10,type="Ljung")
+print("if p.value < 0.05 stationary else not stationary")
+tseries::adf.test(ar_res) #p-value = 0.01
+```
+
+```{r}
+garch_ma=garchFit(train0920~arma(0, 1)+garch(1,1),data=train0920,trace=F)
+summary(garch_ma)
+garch_ma_resi=residuals(garch_ma,standardize=T)
+plot(garch_ma_resi,xlab=" ",ylab=" ",main="",type="l",col="red",ylim=c(-15,15))
+
+#model checking
+Box.test(garch_ma_resi,10,type="Ljung")
+1-pchisq(11.849,9)
+Box.test(garch_ma_resi^2,10,type="Ljung")
+1-pchisq(4.4203,9)
+predict(garch_ma, n.ahead = 241, trace = FALSE, mse = c("cond","uncond"),
+        plot=TRUE, nx=NULL, crit_val=NULL, conf=NULL)
+```
+
+```{r}
+ma_igarch=ugarchspec(
+  variance.model=list(model="iGARCH",
+                      garchOrder=c(1,1)),
+  mean.model=list(armaOrder=c(0,1)))
+m_igarch=ugarchfit(spec=ma_igarch,data=train0920)
+m_igarch
+
+igarch_res=residuals(m_igarch,standardize=T)
+
+Box.test(igarch_res,10,type="Ljung")
+Box.test(igarch_res^2,10,type="Ljung")
+```
+
+```{r}
+egarch=ugarchspec(variance.model=list(model="eGARCH"),
+                 mean.model=list(armaOrder=c(0,1)),
+                 fixed.pars = list(omega = 0))
+m_egarch=ugarchfit(spec=egarch,data=train0920)
+m_egarch
+
+egarch_res=residuals(m_egarch,standardize=T)
+
+Box.test(egarch_res,10,type="Ljung")
+Box.test(egarch_res^2,10,type="Ljung")
+```
+
+```{r}
+tgarch=garchFit(train0918~arma(0,1)+aparch(1,1),data=train0918,trace=F,delta=2,include.delta=F, include.mean = FALSE)
+tgarch
+tgarch_res=residuals(tgarch,standardize=T)
+
+Box.test(tgarch_res,10,type="Ljung")
+Box.test(tgarch_res^2,10,type="Ljung")
+```
+
+```{r}
+arma=arima(train0920,order=c(4,0, 4))
+arma
+
+Box.test(arma$residuals,lag=10,type="Ljung")
+pv=1-pchisq(18.662,2)
+pv#0.1702585
+
+```
+
+
+```{r}
+weekly <- as.numeric(read.csv("weekly_2009_to_2021.csv",header=T, stringsAsFactors=F)$Close)
+plot(weekly,type="l")
+weekly_return= diff(log(weekly))*100
+plot(weekly_return,type="l")
+train0918 = weekly_return[1:523]
+valid19 = weekly_return[524:575]
+train0920 = weekly_return[1:628]
+valid21 = weekly_return[629:676]
+```
+
+```{r}
+acf(train0918,20,main="",col="red",ylim=c(-0.2,1))
+pacf(train0918,20,main="",col="red",ylim=c(-0.2,1))
+print("if p.value < 0.05 not white noise else white noise")
+Box.test(train0918,lag=10,type="Ljung")
+print("if p.value < 0.05 stationary else not stationary")
+tseries::adf.test(train0918) #p-value = 0.01
+```
+
+```{r}
+acf(train0918^2,20,main="",col="red",ylim=c(-0.2,1))
+pacf(train0918^2,20,main="",col="red",ylim=c(-0.2,1))
+print("if p.value < 0.05 not white noise else white noise")
+Box.test(train0918^2,lag=10,type="Ljung")
+print("if p.value < 0.05 stationary else not stationary")
+tseries::adf.test(train0918^2) #p-value = 0.01
+```
+
+```{r}
+train0918_diff = diff(train0918, 12)
+acf(train0918_diff,20,main="",col="red",ylim=c(-0.2,1))
+pacf(train0918_diff,20,main="",col="red",ylim=c(-0.2,1))
+print("if p.value < 0.05 not white noise else white noise")
+Box.test(train0918_diff,lag=10,type="Ljung")
+print("if p.value < 0.05 stationary else not stationary")
+tseries::adf.test(train0918_diff) #p-value = 0.01
+```
+
+```{r}
+arma = arima(train0918,c(4, 0, 4), fixed = c(0, 0, 0, NA, 0, 0, 0, NA, NA))
+arma
+
+Box.test(arma$residuals,lag=10,type="Ljung")
+pv=1-pchisq(10.301,8)
+pv#0.244532
+```
+
+```{r}
+ar_res = (arma$residuals)^2
+acf(ar_res,20,main="",col="red",ylim=c(-0.2,1))
+pacf(ar_res,20,main="",col="red",ylim=c(-0.2,1))
+print("if p.value < 0.05 not white noise else white noise")
+Box.test(ar_res,lag=10,type="Ljung")
+print("if p.value < 0.05 stationary else not stationary")
+tseries::adf.test(ar_res) #p-value = 0.01
+```
+
+```{r}
+garch_ma=garchFit(train0918~garch(1,1),data=train0918,trace=F)
+summary(garch_ma)
+garch_ma_resi=residuals(garch_ma,standardize=T)
+plot(garch_ma_resi,xlab=" ",ylab=" ",main="",type="l",col="red",ylim=c(-15,15))
+
+#model checking
+Box.test(garch_ma_resi,10,type="Ljung")
+Box.test(garch_ma_resi^2,10,type="Ljung")
+predict(garch_ma, n.ahead = 241, trace = FALSE, mse = c("cond","uncond"),
+        plot=TRUE, nx=NULL, crit_val=NULL, conf=NULL)
+```
+
+```{r}
+ma_igarch=ugarchspec(
+  variance.model=list(model="iGARCH",
+                      garchOrder=c(1,1)),
+  mean.model=list(armaOrder=c(0,0)))
+m_igarch=ugarchfit(spec=ma_igarch,data=train0918)
+m_igarch
+#LogLikelihood : -1179.769 only garch
+#LogLikelihood : -1178.414 arma 1 1
+igarch_res=residuals(m_igarch,standardize=T)
+
+Box.test(igarch_res,10,type="Ljung")
+Box.test(igarch_res^2,10,type="Ljung")
+```
+
+```{r}
+egarch=ugarchspec(variance.model=list(model="eGARCH"),
+                 mean.model=list(armaOrder=c(0,0)),
+                 fixed.pars = list(alpha1 = 0))
+m_egarch=ugarchfit(spec=egarch,data=train0918)
+m_egarch
+
+egarch_res=residuals(m_egarch,standardize=T)
+
+Box.test(egarch_res,10,type="Ljung")
+Box.test(egarch_res^2,10,type="Ljung")
+```
+
+```{r}
+tgarch=garchFit(train0918~aparch(2,2),data=train0918,trace=F,delta=2,include.delta=F, include.mean = FALSE, fixed.pars = list(alpha1=0, gamma1=0, beta1=0))
+tgarch
+tgarch_res=residuals(tgarch,standardize=T)
+
+Box.test(tgarch_res,10,type="Ljung")
+Box.test(tgarch_res^2,10,type="Ljung")
+```
+
+```{r}
+sarma = arima(train0918,c(4, 0, 4),seasonal = list(order = c(0, 0, 0),period = 4), fixed = c(0, 0, 0, NA, 0, 0, 0, NA, NA))
+sarma
+
+Box.test(sarma$residuals,lag=10,type="Ljung")
+pv=1-pchisq(14.991,8)
+pv
+```
+
+
+```{r}
+acf(train0920,20,main="",col="red",ylim=c(-0.2,1))
+pacf(train0920,20,main="",col="red",ylim=c(-0.2,1))
+print("if p.value < 0.05 not white noise else white noise")
+Box.test(train0920,lag=10,type="Ljung")
+print("if p.value < 0.05 stationary else not stationary")
+tseries::adf.test(train0920) #p-value = 0.01
+```
+
+```{r}
+acf(train0920^2,20,main="",col="red",ylim=c(-0.2,1))
+pacf(train0920^2,20,main="",col="red",ylim=c(-0.2,1))
+print("if p.value < 0.05 not white noise else white noise")
+Box.test(train0920^2,lag=10,type="Ljung")
+print("if p.value < 0.05 stationary else not stationary")
+tseries::adf.test(train0920^2) #p-value = 0.01
+```
+
+```{r}
+ar = arima(train0920,c(8, 0, 0), fixed = c(0, 0, 0, 0, 0, 0, 0, NA, NA))
+ar
+
+Box.test(ar$residuals,lag=10,type="Ljung")
+pv=1-pchisq(11.879,9)
+pv
+```
+
+```{r}
+ma = arima(train0920,c(0, 0, 8), fixed = c(0, 0, 0, 0, 0, 0, 0, NA, NA))
+ma
+
+Box.test(ma$residuals,lag=10,type="Ljung")
+pv=1-pchisq(11.729,9)
+pv
+```
+
+```{r}
+arma = arima(train0920,c(4, 0, 4), fixed = c(0, 0, 0, NA, 0, 0, 0, NA, NA))
+arma
+
+Box.test(arma$residuals,lag=10,type="Ljung")
+pv=1-pchisq(12.015,8)
+pv
+```
+```{r}
+garch_ar=garchFit(train0920~arma(0, 0)+garch(1,1),data=train0920,trace=F)
+summary(garch_ar)
+garch_ar_resi=residuals(garch_ar,standardize=T)
+plot(garch_ar_resi,xlab=" ",ylab=" ",main="",type="l",col="red",ylim=c(-15,15))
+
+#model checking
+Box.test(garch_ar_resi,10,type="Ljung")
+Box.test(garch_ar_resi^2,10,type="Ljung")
+
+predict(garch_ar, n.ahead = 241, trace = FALSE, mse = c("cond","uncond"),
+        plot=TRUE, nx=NULL, crit_val=NULL, conf=NULL)
+```
+
+
+```{r}
+garchm = ugarchspec(variance.model=list(model="sGARCH", garchOrder=c(1,1)), 
+                    mean.model=list(armaOrder=c(0,0), archm=T, archpow=2, 
+                                    include.mean=TRUE))
+m_garchm = ugarchfit(spec=garchm,data=train0920)
+m_garchm
+
+garchm_res=residuals(m_garchm,standardize=T)
+
+Box.test(garchm_res,10,type="Ljung")
+Box.test(garchm_res^2,10,type="Ljung")
+```
+
+```{r}
+ar_igarch=ugarchspec(
+  variance.model=list(model="iGARCH",
+                      garchOrder=c(1,1)),
+  mean.model=list(armaOrder=c(0,0)))
+m_igarch=ugarchfit(spec=ar_igarch,data=train0920)
+m_igarch
+
+igarch_res=residuals(m_igarch,standardize=T)
+
+Box.test(igarch_res,10,type="Ljung")
+Box.test(igarch_res^2,10,type="Ljung")
+```
+
+```{r}
+egarch=ugarchspec(variance.model=list(model="eGARCH"),
+                 mean.model=list(armaOrder=c(0,0),include.mean=FALSE),
+                 fixed.pars = list(omega = 0))
+m_egarch=ugarchfit(spec=egarch,data=train0920)
+m_egarch
+
+egarch_res=residuals(m_egarch,standardize=T)
+
+Box.test(egarch_res,10,type="Ljung")
+Box.test(egarch_res^2,10,type="Ljung")
+```
+
+```{r}
+tgarch=garchFit(train0918~arma(0,0)+aparch(1,1),data=train0920,trace=F,delta=2,include.delta=F, include.mean = TRUE)
+tgarch
+tgarch_res=residuals(tgarch,standardize=T)
+
+Box.test(tgarch_res,10,type="Ljung")
+Box.test(tgarch_res^2,10,type="Ljung")
+```
+
+
+```{r}
+monthly <- as.numeric(read.csv("monthly_2009_to_2021.csv",header=T, stringsAsFactors=F)$Close)
+plot(monthly,type="l")
+monthly_return= diff(log(monthly))*100
+plot(monthly_return,type="l")
+train0918 = monthly_return[1:121]
+valid19 = monthly_return[122:133]
+train0920 = monthly_return[1:145]
+valid21 = monthly_return[146:157]
+```
+
+```{r}
+acf(train0918,20,main="",col="red",ylim=c(-0.2,1))
+pacf(train0918,20,main="",col="red",ylim=c(-0.2,1))
+print("if p.value < 0.05 not white noise else white noise")
+Box.test(train0918,lag=10,type="Ljung")
+print("if p.value < 0.05 stationary else not stationary")
+tseries::adf.test(train0918) #p-value = 0.01
+```
+
+
+```{r}
+acf(train0918^2,20,main="",col="red",ylim=c(-0.2,1))
+pacf(train0918^2,20,main="",col="red",ylim=c(-0.2,1))
+print("if p.value < 0.05 not white noise else white noise")
+Box.test(train0918^2,lag=10,type="Ljung")
+print("if p.value < 0.05 stationary else not stationary")
+tseries::adf.test(train0918^2) #p-value = 0.01
+```
+
+```{r}
+acf(train0920^2,20,main="",col="red",ylim=c(-0.2,1))
+pacf(train0920^2,20,main="",col="red",ylim=c(-0.2,1))
+print("if p.value < 0.05 not white noise else white noise")
+Box.test(train0920^2,lag=10,type="Ljung")
+print("if p.value < 0.05 stationary else not stationary")
+tseries::adf.test(train0920^2) #p-value = 0.01
+```
+
+```{r}
+acf(train0920,20,main="",col="red",ylim=c(-0.2,1))
+pacf(train0920,20,main="",col="red",ylim=c(-0.2,1))
+print("if p.value < 0.05 not white noise else white noise")
+Box.test(train0920,lag=10,type="Ljung")
+print("if p.value < 0.05 stationary else not stationary")
+tseries::adf.test(train0920) #p-value = 0.01
+```
+
+
+```{r}
+garchm = ugarchspec(variance.model=list(model="sGARCH", garchOrder=c(0,1)), 
+                    mean.model=list(armaOrder=c(0,0), archm=T, archpow=2, 
+                                    include.mean=TRUE),
+                    fixed.pars = list(omega=0))
+m_garchm = ugarchfit(spec=garchm,data=train0918)
+m_garchm
+
+garchm_res=residuals(m_garchm,standardize=T)
+
+Box.test(garchm_res,10,type="Ljung")
+Box.test(garchm_res^2,10,type="Ljung")
+```
+
+
+```{r}
+garch_ar=garchFit(train0920~arma(0, 0)+garch(1,0),data=train0920,trace=F)
+summary(garch_ar)
+garch_ar_resi=residuals(garch_ar,standardize=T)
+plot(garch_ar_resi,xlab=" ",ylab=" ",main="",type="l",col="red",ylim=c(-15,15))
+
+#model checking
+Box.test(garch_ar_resi,10,type="Ljung")
+Box.test(garch_ar_resi^2,10,type="Ljung")
+
+predict(garch_ar, n.ahead = 12, trace = FALSE, mse = c("cond","uncond"),
+        plot=TRUE, nx=NULL, crit_val=NULL, conf=NULL)
+```
+
+
+
+
+```{r}
+egarch=ugarchspec(variance.model=list(model="eGARCH"),
+                 mean.model=list(armaOrder=c(0,0),include.mean=FALSE),
+                 fixed.pars = list(omega = 0))
+m_egarch=ugarchfit(spec=egarch,data=train0920)
+m_egarch
+
+egarch_res=residuals(m_egarch,standardize=T)
+
+Box.test(egarch_res,10,type="Ljung")
+Box.test(egarch_res^2,10,type="Ljung")
+```
+
+```{r}
+tgarch=garchFit(train0918~arma(0,0)+aparch(1,1),data=train0920,trace=F,delta=2,include.delta=F, include.mean = TRUE)
+tgarch
+tgarch_res=residuals(tgarch,standardize=T)
+
+Box.test(tgarch_res,10,type="Ljung")
+Box.test(tgarch_res^2,10,type="Ljung")
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
